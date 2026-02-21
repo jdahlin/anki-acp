@@ -33,7 +33,7 @@ class ChatInput(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.document().setDocumentMargin(3)
-        self.document().documentLayout().documentSizeChanged.connect(self._adjust_height)
+        self.document().contentsChanged.connect(self._adjust_height)
         from aqt.qt import QPalette
         is_dark = mw.palette().color(QPalette.ColorRole.Window).lightness() < 128
         focus_color = "#ffffff" if is_dark else "#0b57d0"
@@ -50,10 +50,13 @@ class ChatInput(QPlainTextEdit):
     _MIN_H = 36
     _MAX_H = 160  # ~5 lines
 
-    def _adjust_height(self, _=None):
-        doc_h = int(self.document().size().height())
-        # 12px accounts for stylesheet padding (6px top + 6px bottom) + border
-        h = max(self._MIN_H, min(doc_h + 12, self._MAX_H))
+    def _adjust_height(self):
+        # QPlainTextDocumentLayout.documentSize().height() is paragraph count,
+        # not pixels — multiply by line spacing instead.
+        lines = max(1, self.document().blockCount())
+        line_h = self.fontMetrics().lineSpacing()
+        # 16px = border (2) + stylesheet padding-top (6) + padding-bottom (6) + slack (2)
+        h = max(self._MIN_H, min(lines * line_h + 16, self._MAX_H))
         if self.height() != h:
             self.setFixedHeight(h)
 
