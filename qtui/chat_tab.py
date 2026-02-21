@@ -40,7 +40,7 @@ class ChatInput(QPlainTextEdit):
         window_color = mw.palette().color(QPalette.ColorRole.Window)
         is_dark = window_color.lightness() < 128
         # Slightly darker than the window background
-        bg_color = window_color.darker(120 if is_dark else 108).name()
+        bg_color = window_color.darker(110 if is_dark else 104).name()
         focus_color = "#c0c0c0" if is_dark else "#0b57d0"
         self.setStyleSheet(
             "QPlainTextEdit {"
