@@ -37,14 +37,17 @@ class ChatInput(QPlainTextEdit):
             lambda: QTimer.singleShot(0, self._adjust_height)
         )
         from aqt.qt import QPalette
-        is_dark = mw.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        focus_color = "#ffffff" if is_dark else "#0b57d0"
+        window_color = mw.palette().color(QPalette.ColorRole.Window)
+        is_dark = window_color.lightness() < 128
+        # Slightly darker than the window background
+        bg_color = window_color.darker(120 if is_dark else 108).name()
+        focus_color = "#c0c0c0" if is_dark else "#0b57d0"
         self.setStyleSheet(
             "QPlainTextEdit {"
             "  border: 1px solid #444;"
             "  border-radius: 16px;"
             "  padding: 6px 12px;"
-            "  background: transparent;"
+            f"  background: {bg_color};"
             "}"
             f"QPlainTextEdit:focus {{ border-color: {focus_color}; }}"
         )
