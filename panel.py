@@ -944,12 +944,20 @@ class ReviewPanel(QDockWidget):
         # Wire up
         self.chat_tab.on_send_message = self._on_chat_send
         self.chat_tab.on_update_card = self._on_update_card
-        self.chat_tab.on_create_card = self._create_card
-        self.chat_tab.on_search_cards = self._search_cards
-        self.chat_tab.on_change_deck = self._change_deck
-        self.chat_tab.on_update_card_back = self._on_update_card
-        self.chat_tab.on_create_cloze = self._create_cloze_card
         self.chat_tab.on_model_change = self._on_model_change
+
+        from .tools import ToolHandler
+        self._tool_handler = ToolHandler(
+            mw=mw,
+            get_current_card=lambda: self._current_card,
+            chat_tab=self.chat_tab,
+            md_to_card_html=_md_to_card_html,
+        )
+        self.chat_tab.on_create_card = self._tool_handler.create_card
+        self.chat_tab.on_search_cards = self._tool_handler.search_cards
+        self.chat_tab.on_change_deck = self._tool_handler.change_deck
+        self.chat_tab.on_update_card_back = self._tool_handler.update_card_back
+        self.chat_tab.on_create_cloze = self._tool_handler.create_cloze
         self._image_sent_sessions: set = set()  # session keys that already had images attached
 
         # Open persistent chat DB alongside the Anki collection
@@ -1090,46 +1098,11 @@ class ReviewPanel(QDockWidget):
             mw.taskman.run_on_main(self.chat_tab.end_ai_message)
 
         def on_tool_use(tool_name: str, tool_input: dict):
-            if tool_name == "create_card":
-                front = tool_input.get("front", "")
-                back = tool_input.get("back", "")
-                mw.taskman.run_on_main(lambda: self._create_card(front, back))
-            elif tool_name == "search_cards":
-                query = tool_input.get("query", "")
-                if query:
-                    mw.taskman.run_on_main(lambda: self._search_cards(query))
-            elif tool_name == "change_deck":
-                deck_name = tool_input.get("deck_name", "")
-                if deck_name:
-                    mw.taskman.run_on_main(lambda: self._change_deck(deck_name))
-            elif tool_name == "update_card_back":
-                content = tool_input.get("content", "")
-                if content:
-                    mw.taskman.run_on_main(lambda: self._on_update_card(content))
-            elif tool_name == "create_cloze":
-                text = tool_input.get("text", "")
-                extra = tool_input.get("extra", "")
-                if text:
-                    mw.taskman.run_on_main(lambda: self._create_cloze_card(text, extra))
+            mw.taskman.run_on_main(lambda: self._tool_handler.dispatch(tool_name, tool_input))
 
+        from .tools import SYSTEM_PROMPT
         ask_ai_async(
-            system_prompt=(
-                "Du är en studieassistent. Hjälp användaren förstå deras Anki-kort. "
-                "Svara alltid på svenska.\n\n"
-                "Du har följande verktyg. Använd API-verktyget om det finns tillgängligt, "
-                "annars skriv blocket exakt som nedan i ditt svar — det parsas automatiskt:\n\n"
-                "Skapa nytt kort:\n"
-                "<create_card>{\"front\": \"fråga\", \"back\": \"svar\"}</create_card>\n\n"
-                "Sök efter kort i samlingen:\n"
-                "<search_cards>sökterm</search_cards>\n\n"
-                "Flytta nuvarande kort till annan lek:\n"
-                "<change_deck>lekens namn</change_deck>\n\n"
-                "Uppdatera baksidan på nuvarande kort:\n"
-                "<update_card_back>nytt innehåll</update_card_back>\n\n"
-                "Skapa cloze-kort (använd {{c1::term}}, {{c2::term}} etc.):\n"
-                "<create_cloze>{\"text\": \"Hjärtat har {{c1::4}} kammare.\", \"extra\": \"valfri extra\"}</create_cloze>\n\n"
-                "Förklara aldrig formatet för användaren — bara använd det."
-            ),
+            system_prompt=SYSTEM_PROMPT,
             card_context=card_context,
             user_question=text,
             config=cfg,
@@ -1142,114 +1115,6 @@ class ReviewPanel(QDockWidget):
             cancel_event=cancel_event,
         )
 
-    def _create_card(self, front: str, back: str):
-        """Create a new Basic card in the current card's deck."""
-        if not front:
-            return
-        card = self._current_card
-        deck_id = card.did if card else mw.col.decks.get_current_id()
-
-        # Prefer a Basic notetype; fall back to the first type with ≥2 fields
-        notetype = None
-        for nt in mw.col.models.all():
-            if nt.get("name", "").lower() == "basic" and len(nt["flds"]) >= 2:
-                notetype = nt
-                break
-        if notetype is None:
-            for nt in mw.col.models.all():
-                if len(nt["flds"]) >= 2:
-                    notetype = nt
-                    break
-        if notetype is None:
-            self.chat_tab.add_status_message("*Kunde inte hitta en kortmall med minst 2 fält.*")
-            return
-
-        note = mw.col.new_note(notetype)
-        note.fields[0] = front
-        note.fields[1] = back
-        mw.col.add_note(note, deck_id)
-        self.chat_tab.add_status_message("✓ Kort sparat i leken.")
-
-    def _create_cloze_card(self, text: str, extra: str = ""):
-        """Create a new cloze card in the current deck."""
-        if not text:
-            return
-        card = self._current_card
-        deck_id = card.did if card else mw.col.decks.get_current_id()
-
-        # Find a Cloze notetype (model type == 1)
-        notetype = None
-        for nt in mw.col.models.all():
-            if nt.get("type", 0) == 1:
-                notetype = nt
-                break
-        if notetype is None:
-            self.chat_tab.add_status_message("*Hittade ingen cloze-mall i samlingen.*")
-            return
-
-        note = mw.col.new_note(notetype)
-        note.fields[0] = text
-        if extra and len(note.fields) > 1:
-            note.fields[1] = extra
-        mw.col.add_note(note, deck_id)
-        self.chat_tab.add_status_message("✓ Cloze-kort sparat i leken.")
-
-    def _search_cards(self, query: str):
-        """Search the collection and show clickable results in a status bubble."""
-        try:
-            nids = mw.col.find_notes(query)[:10]
-        except Exception as e:
-            self.chat_tab.add_status_message(f"*Sökfel: {html_module.escape(str(e))}*")
-            return
-
-        if not nids:
-            self.chat_tab.add_status_message(f'*Inga kort hittades för "{html_module.escape(query)}".*')
-            return
-
-        lines = [f'**Sökresultat: "{html_module.escape(query)}"**\n']
-        for nid in nids:
-            try:
-                note = mw.col.get_note(nid)
-                front = re.sub(r'<[^>]+>', '', note.fields[0] if note.fields else "").strip()[:80]
-                back_raw = note.fields[1] if len(note.fields) > 1 else ""
-                back = re.sub(r'<[^>]+>', '', back_raw).strip()[:60]
-                label = front or f"Note {nid}"
-                snippet = f" — {back}" if back else ""
-                lines.append(f'<a href="anki://note/{nid}">{html_module.escape(label)}</a>'
-                             f'<span style="color:#888;">{html_module.escape(snippet)}</span>')
-            except Exception:
-                continue
-
-        self.chat_tab.add_status_message("\n".join(lines))
-
-    def _change_deck(self, deck_name: str):
-        """Move the current card to the closest matching deck."""
-        card = self._current_card
-        if not card:
-            self.chat_tab.add_status_message("*Inget aktivt kort att flytta.*")
-            return
-
-        # Find best matching deck (case-insensitive substring, then full name)
-        all_decks = mw.col.decks.all_names_and_ids()
-        needle = deck_name.lower()
-        match = next(
-            (d for d in all_decks if d.name.lower() == needle), None
-        ) or next(
-            (d for d in all_decks if needle in d.name.lower()), None
-        )
-
-        if match is None:
-            names = ", ".join(d.name for d in all_decks[:6])
-            self.chat_tab.add_status_message(
-                f'*Hittade ingen lek som matchar "{html_module.escape(deck_name)}". '
-                f'Tillgängliga lekar: {html_module.escape(names)}…*'
-            )
-            return
-
-        mw.col.set_deck([card.id], match.id)
-        self.chat_tab.add_status_message(
-            f"✓ Kort flyttat till **{html_module.escape(match.name)}**."
-        )
 
     def _on_update_card(self, raw_markdown: str):
         card = self._current_card

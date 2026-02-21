@@ -10,3 +10,4 @@ meta.json
 ocr_progress.json
 _zlib_placeholder.dylib
 .venv/
+.env
