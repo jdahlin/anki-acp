@@ -141,7 +141,9 @@ class AiBubble(QWidget):
 
     def set_html(self, html: str, raw: str = ""):
         self._raw = raw
+        cursor = self._browser.textCursor()
         self._browser.setHtml(html)
+        self._browser.setTextCursor(cursor)
 
     def _copy_text(self):
         from aqt.qt import QApplication
