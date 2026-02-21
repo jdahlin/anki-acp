@@ -62,8 +62,10 @@ class ChatInput(QPlainTextEdit):
             visual_lines += layout.lineCount() if (layout and layout.lineCount() > 0) else 1
             block = block.next()
         line_h = self.fontMetrics().lineSpacing()
-        # 16px = border (2) + stylesheet padding-top (6) + padding-bottom (6) + slack (2)
-        h = max(self._MIN_H, min(max(1, visual_lines) * line_h + 16, self._MAX_H))
+        # overhead = contentsMargins top+bottom + document margin (3*2) + border (2)
+        margins = self.contentsMargins()
+        overhead = margins.top() + margins.bottom() + 6 + 2
+        h = max(self._MIN_H, min(max(1, visual_lines) * line_h + overhead, self._MAX_H))
         if self.height() != h:
             self.setFixedHeight(h)
 
