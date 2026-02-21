@@ -33,6 +33,7 @@ class ChatInput(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.document().setDocumentMargin(3)
+        self.document().documentLayout().documentSizeChanged.connect(self._adjust_height)
         from aqt.qt import QPalette
         is_dark = mw.palette().color(QPalette.ColorRole.Window).lightness() < 128
         focus_color = "#ffffff" if is_dark else "#0b57d0"
@@ -45,6 +46,16 @@ class ChatInput(QPlainTextEdit):
             "}"
             f"QPlainTextEdit:focus {{ border-color: {focus_color}; }}"
         )
+
+    _MIN_H = 36
+    _MAX_H = 160  # ~5 lines
+
+    def _adjust_height(self, _=None):
+        doc_h = int(self.document().size().height())
+        # 12px accounts for stylesheet padding (6px top + 6px bottom) + border
+        h = max(self._MIN_H, min(doc_h + 12, self._MAX_H))
+        if self.height() != h:
+            self.setFixedHeight(h)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -156,13 +167,11 @@ class ChatTab(QWidget):
 
         btn_row = QHBoxLayout()
 
-        self.explain_btn = QPushButton("Förklara")
-        self.explain_btn.clicked.connect(lambda: self._send_default("Förklara kortet för mig.", update_card=False))
-        btn_row.addWidget(self.explain_btn)
-
-        self.answer_btn = QPushButton("Svara")
-        self.answer_btn.clicked.connect(lambda: self._send_default("Vad är svaret på frågorna på kortet?", update_card=True))
-        btn_row.addWidget(self.answer_btn)
+        # Dynamic quick-action buttons (configurable via config.json quick_buttons)
+        self._quick_btn_layout = QHBoxLayout()
+        self._quick_btn_layout.setSpacing(4)
+        self._quick_btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_row.addLayout(self._quick_btn_layout)
 
         self.new_btn = QPushButton("Ny")
         self.new_btn.setToolTip("Ny konversation")
@@ -228,6 +237,26 @@ class ChatTab(QWidget):
     def _on_model_changed(self, index: int):
         if self.on_model_change and 0 <= index < len(self._model_ids):
             self.on_model_change(self._model_ids[index])
+
+    def set_quick_buttons(self, buttons: list[dict]):
+        """Rebuild the quick-action button row from a list of
+        {"label": str, "prompt": str, "update_card": bool} dicts."""
+        # Clear existing dynamic buttons
+        while self._quick_btn_layout.count():
+            item = self._quick_btn_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        for btn_def in buttons:
+            label = btn_def.get("label", "")
+            prompt = btn_def.get("prompt", "")
+            update_card = bool(btn_def.get("update_card", False))
+            if not label or not prompt:
+                continue
+            btn = QPushButton(label)
+            btn.clicked.connect(
+                lambda _=False, p=prompt, u=update_card: self._send_default(p, update_card=u)
+            )
+            self._quick_btn_layout.addWidget(btn)
 
     def set_card(self, card_id: int):
         if self._current_card_id is not None:
