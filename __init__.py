@@ -29,14 +29,14 @@ logging.getLogger("ankihack").setLevel(logging.DEBUG)
 
 class _KeyFilter(QObject):
     """
-    When any widget inside our panel has focus, accept ShortcutOverride events
-    so Qt treats the key as handled by that widget, preventing Anki's reviewer
-    shortcuts (Enter/Space/digits) from firing.
+    Accept ShortcutOverride events only when the chat text-input has focus,
+    so that Anki's reviewer shortcuts (Space/digits/Enter) still fire whenever
+    focus is on any other panel widget (buttons, labels, scroll area, etc.).
     """
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.ShortcutOverride and _panel is not None:
-            focused = mw.focusWidget()
-            if focused is not None and _panel.isAncestorOf(focused):
+            from .qtui.chat_tab import ChatInput
+            if isinstance(mw.focusWidget(), ChatInput):
                 event.accept()
                 return True
         return False

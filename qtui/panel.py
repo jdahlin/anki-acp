@@ -135,6 +135,11 @@ class ReviewPanel(QDockWidget):
         plain_front = plain_front.strip()[:120]
         self.resources_tab.set_query(plain_front, card_html=front)
 
+    def keyPressEvent(self, event):
+        """Forward unhandled key presses to Anki's main window."""
+        from aqt.qt import QApplication
+        QApplication.sendEvent(mw, event)
+
     def on_answer_shown(self):
         self.chat_tab.hide_blur()
 
