@@ -57,7 +57,7 @@ class UserBubble(QWidget):
     def __init__(self, text: str, parent=None):
         super().__init__(parent)
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(40, 2, 6, 2)
+        outer.setContentsMargins(8, 2, 6, 2)
 
         label = QLabel(html_module.escape(text))
         label.setWordWrap(True)
