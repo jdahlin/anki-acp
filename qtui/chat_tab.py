@@ -51,14 +51,23 @@ class ChatInput(QPlainTextEdit):
     _MAX_H = 160  # ~5 lines
 
     def _adjust_height(self):
-        # QPlainTextDocumentLayout.documentSize().height() is paragraph count,
-        # not pixels — multiply by line spacing instead.
-        lines = max(1, self.document().blockCount())
+        # Sum visual line counts across all blocks — blockCount() alone misses
+        # wrapping within a single paragraph.
+        visual_lines = 0
+        block = self.document().begin()
+        while block.isValid():
+            layout = block.layout()
+            visual_lines += layout.lineCount() if (layout and layout.lineCount() > 0) else 1
+            block = block.next()
         line_h = self.fontMetrics().lineSpacing()
         # 16px = border (2) + stylesheet padding-top (6) + padding-bottom (6) + slack (2)
-        h = max(self._MIN_H, min(lines * line_h + 16, self._MAX_H))
+        h = max(self._MIN_H, min(max(1, visual_lines) * line_h + 16, self._MAX_H))
         if self.height() != h:
             self.setFixedHeight(h)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adjust_height()  # wrapping changes when panel width changes
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -175,11 +184,6 @@ class ChatTab(QWidget):
         self._quick_btn_layout.setSpacing(4)
         self._quick_btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_row.addLayout(self._quick_btn_layout)
-
-        self.new_btn = QPushButton("Ny")
-        self.new_btn.setToolTip("Ny konversation")
-        self.new_btn.clicked.connect(self._on_new_conversation)
-        btn_row.addWidget(self.new_btn)
 
         btn_row.addStretch()
 
@@ -421,6 +425,9 @@ class ChatTab(QWidget):
         if not text:
             return
         self.input.clear()
+        if text == "/clear":
+            self._on_new_conversation()
+            return
         if self.on_send_message:
             self.on_send_message(text)
 
