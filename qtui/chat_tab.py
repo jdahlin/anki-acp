@@ -7,7 +7,7 @@ from aqt import mw
 from aqt.qt import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QComboBox, QScrollArea, QGraphicsBlurEffect,
-    Qt, QEvent,
+    Qt, QEvent, QTimer,
 )
 
 from .bubbles import BlurOverlay, UserBubble, AiBubble
@@ -33,7 +33,9 @@ class ChatInput(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.document().setDocumentMargin(3)
-        self.document().contentsChanged.connect(self._adjust_height)
+        self.document().contentsChanged.connect(
+            lambda: QTimer.singleShot(0, self._adjust_height)
+        )
         from aqt.qt import QPalette
         is_dark = mw.palette().color(QPalette.ColorRole.Window).lightness() < 128
         focus_color = "#ffffff" if is_dark else "#0b57d0"
