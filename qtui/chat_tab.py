@@ -50,7 +50,7 @@ class ChatInput(QPlainTextEdit):
         )
 
     _MIN_H = 36
-    _MAX_H = 160  # ~5 lines
+    _MAX_LINES = 5
 
     def _adjust_height(self):
         # Sum visual line counts across all blocks — blockCount() alone misses
@@ -65,7 +65,8 @@ class ChatInput(QPlainTextEdit):
         # overhead = contentsMargins top+bottom + document margin (3*2) + border (2)
         margins = self.contentsMargins()
         overhead = margins.top() + margins.bottom() + 6 + 2
-        h = max(self._MIN_H, min(max(1, visual_lines) * line_h + overhead, self._MAX_H))
+        max_h = self._MAX_LINES * line_h + overhead
+        h = max(self._MIN_H, min(max(1, visual_lines) * line_h + overhead, max_h))
         if self.height() != h:
             self.setFixedHeight(h)
 
