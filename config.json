@@ -1,0 +1,15 @@
+{
+    "harness": "claude-acp",
+    "acp_binary": "claude-agent-acp",
+    "codex_acp_binary": "codex-acp",
+    "claude_api_key": "",
+    "openai_api_key": "",
+    "claude_model": "claude-sonnet-4-6",
+    "claude_acp_model": "claude-haiku-4-5-20251001",
+    "openai_model": "gpt-4o",
+    "response_language": "sv",
+    "speech_language": "sv-SE",
+    "youtube_api_key": "",
+    "google_cse_api_key": "",
+    "google_cse_cx": ""
+}

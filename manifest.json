@@ -1,0 +1,8 @@
+{
+    "name": "Speech & AI Chat Review Assistant",
+    "package": "ankihack",
+    "author": "Johan Dahlin",
+    "description": "Press F5 to ask questions about cards via speech or chat. Powered by Claude/OpenAI via ACP or direct API.",
+    "homepage": "",
+    "conflicts": []
+}

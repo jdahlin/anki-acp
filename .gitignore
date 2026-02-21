@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+canvas_content/
+lectures/
+search.db
+meta.json
+ocr_progress.json
+_zlib_placeholder.dylib
+.venv/

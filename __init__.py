@@ -1,0 +1,95 @@
+"""
+AI Chat & Resources Review Assistant for Anki
+"""
+
+import logging
+import os
+
+from aqt import mw, gui_hooks
+from aqt.qt import Qt, QObject, QEvent
+
+_panel = None
+
+_LOG_PATH = os.path.expanduser("~/ankihack_debug.log")
+
+def _log(msg):
+    with open(_LOG_PATH, "a") as f:
+        f.write(f"[ankihack] {msg}\n")
+
+# Route Python logging from ankihack.* to the debug log file
+logging.getLogger("ankihack").addHandler(
+    logging.FileHandler(_LOG_PATH, encoding="utf-8")
+)
+logging.getLogger("ankihack").setLevel(logging.DEBUG)
+
+
+# ------------------------------------------------------------------
+# Panel
+# ------------------------------------------------------------------
+
+class _KeyFilter(QObject):
+    """
+    When any widget inside our panel has focus, accept ShortcutOverride events
+    so Qt treats the key as handled by that widget, preventing Anki's reviewer
+    shortcuts (Enter/Space/digits) from firing.
+    """
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.ShortcutOverride and _panel is not None:
+            focused = mw.focusWidget()
+            if focused is not None and _panel.isAncestorOf(focused):
+                event.accept()
+                return True
+        return False
+
+
+_key_filter = _KeyFilter()
+
+
+def _get_panel():
+    global _panel
+    if _panel is None:
+        from .panel import ReviewPanel
+        _panel = ReviewPanel()
+        mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _panel)
+        mw.installEventFilter(_key_filter)
+        # Thin, subtle dock separator
+        mw.setStyleSheet(mw.styleSheet() + """
+            QMainWindow::separator {
+                background: transparent;
+                width: 1px;
+                height: 1px;
+            }
+            QMainWindow::separator:hover {
+                background: rgba(128, 128, 128, 0.3);
+            }
+        """)
+        _log("Panel created")
+    return _panel
+
+
+# ------------------------------------------------------------------
+# Hooks
+# ------------------------------------------------------------------
+
+def _on_reviewer_did_show_question(card):
+    panel = _get_panel()
+    panel.setVisible(True)
+    panel.on_new_card(card)
+
+def _on_reviewer_did_show_answer(card):
+    if _panel is not None:
+        _panel.on_answer_shown()
+
+def _on_reviewer_will_end():
+    global _panel
+    if _panel is not None:
+        _panel.on_review_ended()
+
+def _setup():
+    _log("_setup() called")
+    gui_hooks.reviewer_did_show_question.append(_on_reviewer_did_show_question)
+    gui_hooks.reviewer_did_show_answer.append(_on_reviewer_did_show_answer)
+    gui_hooks.reviewer_will_end.append(_on_reviewer_will_end)
+    _log("_setup() complete")
+
+gui_hooks.profile_did_open.append(_setup)
