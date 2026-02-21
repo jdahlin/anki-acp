@@ -48,7 +48,7 @@ _key_filter = _KeyFilter()
 def _get_panel():
     global _panel
     if _panel is None:
-        from .panel import ReviewPanel
+        from .qtui import ReviewPanel
         _panel = ReviewPanel()
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _panel)
         mw.installEventFilter(_key_filter)

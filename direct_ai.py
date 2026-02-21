@@ -234,7 +234,7 @@ _acp_clients: dict[str, object] = {}   # binary -> ACPClient
 def _ask_via_acp(system_prompt, card_context, user_question, config,
                  on_chunk, on_done, on_error, session_key=None, images=None,
                  cancel_event=None):
-    from .acp_client import ACPClient
+    from .acp import ACPClient
 
     harness = config.get("harness", "claude-acp")
     binary = config.get("acp_binary", "claude-agent-acp")
