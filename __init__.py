@@ -90,6 +90,10 @@ def _setup():
     gui_hooks.reviewer_did_show_question.append(_on_reviewer_did_show_question)
     gui_hooks.reviewer_did_show_answer.append(_on_reviewer_did_show_answer)
     gui_hooks.reviewer_will_end.append(_on_reviewer_will_end)
+
+    from .qtui.settings_dialog import show as _show_settings
+    mw.addonManager.setConfigAction(__name__, _show_settings)
+
     _log("_setup() complete")
 
 gui_hooks.profile_did_open.append(_setup)
