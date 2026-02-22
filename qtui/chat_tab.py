@@ -180,6 +180,14 @@ class ChatTab(QWidget):
         # Overlay — shown during question phase, hidden when answer is revealed
         self._overlay = BlurOverlay(self)
 
+        # Difficulty hint — shown when FSRS flags the card as hard
+        self._difficulty_label = QLabel()
+        self._difficulty_label.setStyleSheet(
+            "color: #e8a020; font-size: 10px; padding: 2px 4px;"
+        )
+        self._difficulty_label.setVisible(False)
+        layout.addWidget(self._difficulty_label)
+
         # Input
         self.input = ChatInput()
         self.input.return_pressed = self._on_send
@@ -468,3 +476,14 @@ class ChatTab(QWidget):
     def hide_blur(self):
         self._scroll.setGraphicsEffect(None)
         self._overlay.hide()
+
+    # ------------------------------------------------------------------
+    # Difficulty hint
+    # ------------------------------------------------------------------
+
+    def show_difficulty_hint(self, label: str):
+        self._difficulty_label.setText(f"⚠ {label}")
+        self._difficulty_label.setVisible(True)
+
+    def hide_difficulty_hint(self):
+        self._difficulty_label.setVisible(False)

@@ -7,9 +7,16 @@
     "claude_model": "claude-sonnet-4-6",
     "claude_acp_model": "claude-haiku-4-5-20251001",
     "openai_model": "gpt-4o",
+    "quick_buttons": [
+        {"label": "Förklara", "prompt": "Förklara kortet för mig."},
+        {"label": "Svara",    "prompt": "Vad är svaret på frågorna på kortet?", "update_card": true},
+        {"label": "Cloze",    "prompt": "Konvertera detta kort till ett cloze-kort med lämpliga cloze-deletions. Skapa gärna flera cloze-numrerade luckor (c1, c2 ...) för de viktigaste begreppen."}
+    ],
     "response_language": "sv",
     "speech_language": "sv-SE",
     "youtube_api_key": "",
     "google_cse_api_key": "",
-    "google_cse_cx": ""
+    "google_cse_cx": "",
+    "difficulty_min_reps": 5,
+    "difficulty_fsrs_d_threshold": 6.0
 }

@@ -70,6 +70,7 @@ class ReviewPanel(QDockWidget):
         cfg = self._cfg()
         self.chat_tab.set_harness(cfg.get("harness", "?"))
         self.chat_tab.set_model(cfg.get("claude_acp_model", "claude-haiku-4-5-20251001"))
+        self.chat_tab.set_quick_buttons(cfg.get("quick_buttons", []))
 
     @staticmethod
     def _cfg():
@@ -121,6 +122,12 @@ class ReviewPanel(QDockWidget):
         self.chat_tab.set_card(card.nid)
         if self.chat_tab._messages:
             self.chat_tab.show_blur()
+
+        from ..difficulty import is_difficult, difficulty_label
+        if is_difficult(card, self._cfg()):
+            self.chat_tab.show_difficulty_hint(difficulty_label(card))
+        else:
+            self.chat_tab.hide_difficulty_hint()
 
         note = card.note()
         card_text = "\n".join(note.fields)
