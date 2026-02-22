@@ -1,15 +1,13 @@
 """
-Direct AI calls — Claude API and OpenAI API.
-Also handles ACP harness routing.
+AI calls via ACP (Agent Client Protocol).
 ask_ai_async() is the single entry point used by panel.py.
+Supported harnesses: "claude-acp", "codex-acp".
 """
-
 from __future__ import annotations
-import json
 import threading
-import urllib.request
-import urllib.error
 from typing import Callable
+
+_acp_clients: dict[str, object] = {}   # cache_key -> ACPClient
 
 
 def ask_ai_async(
@@ -22,213 +20,21 @@ def ask_ai_async(
     on_error: Callable[[str], None],
     session_key: str | None = None,
     images: list | None = None,
-    on_tool_use: Callable[[str, dict], None] | None = None,
     cancel_event=None,
 ):
     """
-    Route to the right backend based on config["harness"].
-    All callbacks are called from a background thread;
-    caller must dispatch to main thread if needed (panel.py uses QTimer.singleShot).
-    session_key: opaque string (e.g. card ID) used to reuse ACP sessions across calls.
-    cancel_event: threading.Event — set it to abort the stream early.
+    Route to the ACP backend based on config["harness"].
+    All callbacks are called from a background thread.
+    session_key: reuses ACP sessions across calls for the same card.
+    cancel_event: threading.Event — set to abort mid-stream.
     """
-    harness = config.get("harness", "claude-api")
-
-    imgs = images or []
-
-    if harness in ("claude-acp", "codex-acp"):
-        _ask_via_acp(system_prompt, card_context, user_question, config,
-                     on_chunk, on_done, on_error, session_key=session_key,
-                     images=imgs, cancel_event=cancel_event)
-    elif harness == "openai-api":
-        threading.Thread(
-            target=_ask_openai,
-            args=(system_prompt, card_context, user_question, config,
-                  on_chunk, on_done, on_error, imgs, cancel_event),
-            daemon=True,
-        ).start()
-    else:  # default: claude-api
-        threading.Thread(
-            target=_ask_claude,
-            args=(system_prompt, card_context, user_question, config,
-                  on_chunk, on_done, on_error, imgs, on_tool_use, cancel_event),
-            daemon=True,
-        ).start()
-
-
-# ------------------------------------------------------------------
-# Claude API (streaming SSE)
-# ------------------------------------------------------------------
-
-from .tools import ALL_TOOLS as _ALL_TOOLS
-
-
-def _ask_claude(system_prompt, card_context, user_question, config,
-                on_chunk, on_done, on_error, images=None, on_tool_use=None,
-                cancel_event=None):
-    api_key = config.get("claude_api_key", "")
-    if not api_key:
-        on_error("Claude API-nyckel saknas. Öppna Verktyg > Tillägg > Config.")
-        return
-
-    model = config.get("claude_model", "claude-sonnet-4-6")
-    text = f"{card_context}\n\nFråga: {user_question}" if card_context else user_question
-
-    if images:
-        user_content = [
-            {"type": "image", "source": {"type": "base64",
-             "media_type": img["media_type"], "data": img["data"]}}
-            for img in images
-        ] + [{"type": "text", "text": text}]
-    else:
-        user_content = text
-
-    payload_dict = {
-        "model": model,
-        "max_tokens": 1024,
-        "stream": True,
-        "system": system_prompt,
-        "messages": [{"role": "user", "content": user_content}],
-        "tools": _ALL_TOOLS,
-    }
-    payload = json.dumps(payload_dict).encode()
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=payload,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2024-06-01",
-            "content-type": "application/json",
-        },
-        method="POST",
+    _ask_via_acp(
+        system_prompt, card_context, user_question, config,
+        on_chunk, on_done, on_error,
+        session_key=session_key,
+        images=images or [],
+        cancel_event=cancel_event,
     )
-
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            _tool_name = None
-            _tool_json_parts: list[str] = []
-
-            for line in resp:
-                if cancel_event and cancel_event.is_set():
-                    break
-                line = line.decode().strip()
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-
-                evt = data.get("type")
-                if evt == "content_block_start":
-                    block = data.get("content_block", {})
-                    if block.get("type") == "tool_use":
-                        _tool_name = block.get("name")
-                        _tool_json_parts = []
-                elif evt == "content_block_delta":
-                    delta = data.get("delta", {})
-                    if delta.get("type") == "text_delta":
-                        on_chunk(delta.get("text", ""))
-                    elif delta.get("type") == "input_json_delta":
-                        _tool_json_parts.append(delta.get("partial_json", ""))
-                elif evt == "content_block_stop":
-                    if _tool_name and _tool_json_parts and on_tool_use:
-                        try:
-                            tool_input = json.loads("".join(_tool_json_parts))
-                            on_tool_use(_tool_name, tool_input)
-                        except json.JSONDecodeError:
-                            pass
-                    _tool_name = None
-                    _tool_json_parts = []
-
-        on_done()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        on_error(f"Claude HTTP {e.code}: {body[:200]}")
-    except Exception as e:
-        on_error(str(e))
-
-
-# ------------------------------------------------------------------
-# OpenAI API (streaming SSE)
-# ------------------------------------------------------------------
-
-def _ask_openai(system_prompt, card_context, user_question, config,
-                on_chunk, on_done, on_error, images=None, cancel_event=None):
-    api_key = config.get("openai_api_key", "")
-    if not api_key:
-        on_error("OpenAI API-nyckel saknas. Öppna Verktyg > Tillägg > Config.")
-        return
-
-    model = config.get("openai_model", "gpt-4o")
-    text = f"{card_context}\n\nFråga: {user_question}" if card_context else user_question
-
-    if images:
-        user_content = [{"type": "text", "text": text}] + [
-            {"type": "image_url",
-             "image_url": {"url": f"data:{img['media_type']};base64,{img['data']}"}}
-            for img in images
-        ]
-    else:
-        user_content = text
-
-    payload = json.dumps({
-        "model": model,
-        "stream": True,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "content-type": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            for line in resp:
-                if cancel_event and cancel_event.is_set():
-                    break
-                line = line.decode().strip()
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-                choices = data.get("choices", [])
-                if choices:
-                    delta = choices[0].get("delta", {})
-                    text = delta.get("content", "")
-                    if text:
-                        on_chunk(text)
-        on_done()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        on_error(f"OpenAI HTTP {e.code}: {body[:200]}")
-    except Exception as e:
-        on_error(str(e))
-
-
-# ------------------------------------------------------------------
-# ACP harness
-# ------------------------------------------------------------------
-
-_acp_clients: dict[str, object] = {}   # binary -> ACPClient
 
 
 def _ask_via_acp(system_prompt, card_context, user_question, config,
@@ -237,11 +43,12 @@ def _ask_via_acp(system_prompt, card_context, user_question, config,
     from .acp import ACPClient
 
     harness = config.get("harness", "claude-acp")
-    binary = config.get("acp_binary", "claude-agent-acp")
     extra_args = []
+
     if harness == "codex-acp":
         binary = config.get("codex_acp_binary", "codex-acp")
-    elif harness == "claude-acp":
+    else:  # claude-acp (default)
+        binary = config.get("acp_binary", "claude-agent-acp")
         model = config.get("claude_acp_model", "claude-haiku-4-5-20251001")
         extra_args = ["--model", model]
 
@@ -267,7 +74,6 @@ def _ask_via_acp(system_prompt, card_context, user_question, config,
                 return
             _acp_clients[cache_key] = client
 
-        # First message for this session_key includes context; subsequent ones don't
         existing = session_key in client._sessions if session_key else False
 
         session_id, err = client.get_or_create_session(session_key)
@@ -283,7 +89,6 @@ def _ask_via_acp(system_prompt, card_context, user_question, config,
         else:
             full_prompt = f"Fråga: {user_question}"
 
-        # Images are only sent on the first message (when context is included)
         prompt_images = images if (not existing and images) else None
 
         def _on_chunk_guarded(chunk):

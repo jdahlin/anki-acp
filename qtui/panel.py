@@ -201,9 +201,6 @@ class ReviewPanel(QDockWidget):
             mw.taskman.run_on_main(lambda: self.chat_tab.append_ai_chunk(f"[Fel: {err}]"))
             mw.taskman.run_on_main(self.chat_tab.end_ai_message)
 
-        def on_tool_use(tool_name: str, tool_input: dict):
-            mw.taskman.run_on_main(lambda: self._tool_handler.dispatch(tool_name, tool_input))
-
         ask_ai_async(
             system_prompt=SYSTEM_PROMPT,
             card_context=card_context,
@@ -214,7 +211,6 @@ class ReviewPanel(QDockWidget):
             on_error=on_error,
             images=images if images else None,
             session_key=session_key,
-            on_tool_use=on_tool_use,
             cancel_event=cancel_event,
         )
 
